@@ -77,3 +77,6 @@ export const bridge = {
   onConfig:       (cb) => on('config',        cb),
   onTestResult:   (cb) => on('test-result',   cb),
 };
+
+// Expõe send direto para o HomeScreen usar
+bridge.send = send;

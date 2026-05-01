@@ -318,6 +318,29 @@ rn.channel.on('message', (raw) => {
   const { event, data } = msg;
 
   switch (event) {
+    
+    case 'set-projects-list': {
+      const BASE_PORT = 3001;
+      const discovered = data.projects || [];
+      const next = {};
+      discovered.forEach((p, i) => {
+        const id = p.folderName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const ex = services[id];
+        next[id] = { ...p, id, port: BASE_PORT + i, proc: ex?.proc ?? null, status: ex?.status ?? 'stopped' };
+      });
+      for (const [id, svc] of Object.entries(services)) {
+        if (!next[id] && svc.proc) svc.proc.kill('SIGTERM');
+      }
+      services = next;
+      const ip = getIP();
+      rn.channel.send(JSON.stringify({ event: 'projects-list', data: Object.values(services).map(s => ({
+        id: s.id, name: s.name, description: s.description, version: s.version,
+        folderName: s.folderName, script: s.script, port: s.port,
+        status: fs.existsSync(s.dir) ? s.status : 'missing',
+        tunnelUrl: tunnels.getUrl(s.id), ip,
+      }))}));
+      break;
+    }
     case 'refresh':          sendProjectsList(); break;
     case 'start-service':    startService(data.id); break;
     case 'stop-service':     stopService(data.id); break;
