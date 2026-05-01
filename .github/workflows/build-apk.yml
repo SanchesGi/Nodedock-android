@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -84,12 +87,10 @@ jobs:
       - name: Configure signing
         working-directory: NodeDockAndroid/android
         run: |
-          cat >> gradle.properties << 'PROPS'
-          MYAPP_UPLOAD_STORE_FILE=nodedock-release.keystore
-          MYAPP_UPLOAD_KEY_ALIAS=nodedock
-          MYAPP_UPLOAD_STORE_PASSWORD=nodedock123
-          MYAPP_UPLOAD_KEY_PASSWORD=nodedock123
-          PROPS
+          printf "\nMYAPP_UPLOAD_STORE_FILE=nodedock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=nodedock\nMYAPP_UPLOAD_STORE_PASSWORD=nodedock123\nMYAPP_UPLOAD_KEY_PASSWORD=nodedock123\n" >> gradle.properties
+
+      - name: Show build.gradle for debug
+        run: cat NodeDockAndroid/android/app/build.gradle
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -103,9 +104,10 @@ jobs:
         working-directory: NodeDockAndroid/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tail -50
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: NodeDock-APK-v${{ github.run_number }}
@@ -113,7 +115,7 @@ jobs:
           retention-days: 30
 
       - name: Create Release
-        if: github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1.${{ github.run_number }}
