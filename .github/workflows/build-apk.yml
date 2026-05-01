@@ -56,6 +56,41 @@ jobs:
           cp -rf src/lib       SentriDockAndroid/src/lib
           cp -rf nodejs-assets SentriDockAndroid/nodejs-assets
 
+      - name: Install icon tool and resize icon
+        run: |
+          npm install -g sharp-cli 2>/dev/null || true
+          pip install Pillow --break-system-packages -q
+
+          # Gera ícones em todos os tamanhos necessários
+          python3 << 'PYEOF'
+          from PIL import Image
+          import os, shutil
+
+          src = 'assets/icon.png'
+          if not os.path.exists(src):
+            print('Ícone não encontrado, usando padrão.')
+            exit(0)
+
+          sizes = {
+            'mipmap-mdpi':    48,
+            'mipmap-hdpi':    72,
+            'mipmap-xhdpi':   96,
+            'mipmap-xxhdpi':  144,
+            'mipmap-xxxhdpi': 192,
+          }
+
+          base = 'SentriDockAndroid/android/app/src/main/res'
+          img  = Image.open(src).convert('RGBA')
+
+          for folder, size in sizes.items():
+            out_dir = f'{base}/{folder}'
+            os.makedirs(out_dir, exist_ok=True)
+            resized = img.resize((size, size), Image.LANCZOS)
+            resized.save(f'{out_dir}/ic_launcher.png')
+            resized.save(f'{out_dir}/ic_launcher_round.png')
+            print(f'✅ {folder}: {size}x{size}')
+          PYEOF
+
       - name: Merge package.json dependencies
         run: |
           node -e "
@@ -93,7 +128,16 @@ jobs:
           "
 
       - name: Patch app build.gradle
-        run: node scripts/patch-gradle.js
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const p=path.resolve('SentriDockAndroid','android','app','build.gradle');
+          let g=fs.readFileSync(p,'utf8');
+          if(!g.includes('abiFilters')){g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk {\n            abiFilters \"arm64-v8a\", \"x86_64\"\n        }');}
+          if(!g.includes('packagingOptions')){g=g.replace(/buildTypes\s*\{/,'packagingOptions {\n        pickFirst \"**/libnode.so\"\n        pickFirst \"**/libc++_shared.so\"\n    }\n    buildTypes {');}
+          fs.writeFileSync(p,g);
+          console.log('patched');
+          "
 
       - name: Patch AndroidManifest permissions
         run: |
@@ -101,12 +145,13 @@ jobs:
           const fs=require('fs'),path=require('path');
           const p=path.resolve('SentriDockAndroid','android','app','src','main','AndroidManifest.xml');
           let xml=fs.readFileSync(p,'utf8');
-          const perms=\`
-            <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />
-            <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"29\" />
-            <uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" />
-            <uses-permission android:name=\"android.permission.INTERNET\" />
-            <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\`;
+          const perms=[
+            '<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />',
+            '<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"29\" />',
+            '<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" />',
+            '<uses-permission android:name=\"android.permission.INTERNET\" />',
+            '<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />',
+          ].join('\n    ');
           if(!xml.includes('MANAGE_EXTERNAL_STORAGE')){
             xml=xml.replace('<uses-permission android:name=\"android.permission.INTERNET\" />',perms);
           }
@@ -128,15 +173,7 @@ jobs:
           const p=path.resolve('SentriDockAndroid','android','app','build.gradle');
           let g=fs.readFileSync(p,'utf8');
           if(!g.includes('signingConfigs')){
-            g=g.replace(/android\s*\{/,\`android {
-              signingConfigs {
-                release {
-                  storeFile file(MYAPP_UPLOAD_STORE_FILE)
-                  storePassword MYAPP_UPLOAD_STORE_PASSWORD
-                  keyAlias MYAPP_UPLOAD_KEY_ALIAS
-                  keyPassword MYAPP_UPLOAD_KEY_PASSWORD
-                }
-              }\`);
+            g=g.replace(/android\s*\{/,'android {\n    signingConfigs {\n        release {\n            storeFile file(MYAPP_UPLOAD_STORE_FILE)\n            storePassword MYAPP_UPLOAD_STORE_PASSWORD\n            keyAlias MYAPP_UPLOAD_KEY_ALIAS\n            keyPassword MYAPP_UPLOAD_KEY_PASSWORD\n        }\n    }');
             g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
           }
           fs.writeFileSync(p,g);
