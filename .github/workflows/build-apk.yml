@@ -1,0 +1,183 @@
+name: Build NodeDock APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── Checkout ───────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Java 17 ───────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── Node.js ───────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      # ── Android SDK ───────────────────────────────────────────
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager "ndk;25.1.8937393"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.1.8937393" >> $GITHUB_ENV
+
+      # ── Init React Native Project ─────────────────────────────
+      - name: Init React Native project
+        run: |
+          npx @react-native-community/cli@13 init NodeDockAndroid \
+            --version 0.73.6 \
+            --skip-install \
+            --title "NodeDock" \
+            --package-name "com.nodedock.android"
+
+      # ── Overlay nossos arquivos ───────────────────────────────
+      - name: Overlay source files
+        run: |
+          # Substituir App.jsx gerado pelo nosso
+          cp -f src/App.jsx         NodeDockAndroid/App.jsx
+          cp -f index.js            NodeDockAndroid/index.js
+
+          # Copiar nossas screens e libs
+          mkdir -p NodeDockAndroid/src
+          cp -rf src/screens        NodeDockAndroid/src/screens
+          cp -rf src/lib            NodeDockAndroid/src/lib
+
+          # Copiar Node.js backend (roda dentro do nodejs-mobile)
+          cp -rf nodejs-assets      NodeDockAndroid/nodejs-assets
+
+          # Copiar patches gradle
+          cp -f patches/build.gradle.patch NodeDockAndroid/android/app/build.gradle.patch || true
+
+      # ── Mesclar dependências ──────────────────────────────────
+      - name: Merge package.json dependencies
+        run: node scripts/merge-deps.js
+
+      # ── Instalar dependências do RN ───────────────────────────
+      - name: Install React Native dependencies
+        working-directory: NodeDockAndroid
+        run: npm install
+
+      # ── Instalar nodejs-mobile-react-native ───────────────────
+      - name: Install nodejs-mobile-react-native
+        working-directory: NodeDockAndroid
+        run: |
+          npm install nodejs-mobile-react-native@0.3.3
+          npm install @react-native-community/async-storage@1.21.0 || true
+
+      # ── Instalar dependências do backend Node ─────────────────
+      - name: Install Node.js backend dependencies
+        working-directory: NodeDockAndroid/nodejs-assets/nodejs-project
+        run: npm install
+
+      # ── Aplicar patch gradle para nodejs-mobile ───────────────
+      - name: Patch android/app/build.gradle
+        run: node scripts/patch-gradle.js
+
+      # ── Gerar keystore para assinatura ───────────────────────
+      - name: Generate release keystore
+        working-directory: NodeDockAndroid/android/app
+        run: |
+          keytool -genkeypair -v \
+            -keystore nodedock-release.keystore \
+            -alias nodedock \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass nodedock123 \
+            -keypass nodedock123 \
+            -dname "CN=NodeDock, OU=NodeDock, O=NodeDock, L=BR, S=BR, C=BR"
+
+      # ── Configurar signing ────────────────────────────────────
+      - name: Configure signing
+        working-directory: NodeDockAndroid/android
+        run: |
+          cat >> gradle.properties << 'EOF'
+          MYAPP_UPLOAD_STORE_FILE=nodedock-release.keystore
+          MYAPP_UPLOAD_KEY_ALIAS=nodedock
+          MYAPP_UPLOAD_STORE_PASSWORD=nodedock123
+          MYAPP_UPLOAD_KEY_PASSWORD=nodedock123
+          EOF
+
+      - name: Patch build.gradle with signing config
+        run: node scripts/patch-signing.js
+
+      # ── Gradle cache ──────────────────────────────────────────
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('NodeDockAndroid/android/**/*.gradle*') }}
+          restore-keys: gradle-
+
+      # ── Build APK release ─────────────────────────────────────
+      - name: Build APK
+        working-directory: NodeDockAndroid/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.ndkVersion=25.1.8937393 \
+            --no-daemon \
+            --stacktrace
+
+      # ── Renomear e publicar ───────────────────────────────────
+      - name: Rename APK
+        run: |
+          mkdir -p artifacts
+          cp NodeDockAndroid/android/app/build/outputs/apk/release/app-release.apk \
+             artifacts/NodeDock-v${{ github.run_number }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NodeDock-APK
+          path: artifacts/NodeDock-v${{ github.run_number }}.apk
+          retention-days: 30
+
+      # ── Release automático em push na main ───────────────────
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: NodeDock v0.1.${{ github.run_number }}
+          body: |
+            ## NodeDock Android
+            Build automático gerado em ${{ github.event.head_commit.timestamp }}
+            
+            ### Como instalar
+            1. Baixe o APK abaixo
+            2. No Android: Configurações → Segurança → Fontes desconhecidas → Permitir
+            3. Abra o APK e instale
+            
+            ### O que tem nesta versão
+            - Gerenciador portátil de projetos Node.js
+            - Bot Telegram integrado
+            - Túneis públicos via localtunnel
+            - Seletor de diretório de projetos
+          files: artifacts/NodeDock-v${{ github.run_number }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

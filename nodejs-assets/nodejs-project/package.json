@@ -1,0 +1,9 @@
+{
+  "name": "nodedock-backend",
+  "version": "1.0.0",
+  "description": "NodeDock Node.js backend — roda dentro do nodejs-mobile",
+  "main": "main.js",
+  "dependencies": {
+    "localtunnel": "^2.0.2"
+  }
+}
