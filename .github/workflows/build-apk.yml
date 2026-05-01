@@ -67,6 +67,9 @@ jobs:
         working-directory: NodeDockAndroid
         run: npm install nodejs-mobile-react-native@0.3.3
 
+      - name: Patch nodejs-mobile build.gradle
+        run: node scripts/patch-nodejs-mobile.js
+
       - name: Patch gradle for nodejs-mobile
         run: node scripts/patch-gradle.js
 
