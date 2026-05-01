@@ -29,35 +29,6 @@ export function on(event, cb) {
   return () => { listeners[event] = (listeners[event] || []).filter(x => x !== cb); };
 }
 
-// Converte qualquer URI/path para caminho absoluto real
-export function resolveRealPath(uri) {
-  if (!uri) return null;
-
-  const str = decodeURIComponent(String(uri));
-
-  // Já é caminho absoluto
-  if (str.startsWith('/storage') || str.startsWith('/sdcard')) return str;
-
-  // content://com.android.externalstorage.documents/tree/primary:Pasta/Sub
-  const primaryMatch = str.match(/primary:([^/\s]*)/);
-  if (primaryMatch) {
-    const rel = primaryMatch[1].replace(/:/g, '/');
-    return rel ? `/storage/emulated/0/${rel}` : '/storage/emulated/0';
-  }
-
-  // content://...tree/...document/primary:Pasta
-  const docMatch = str.match(/document\/primary:(.+)/);
-  if (docMatch) {
-    return `/storage/emulated/0/${docMatch[1].replace(/:/g,'/')}`;
-  }
-
-  // Último recurso: extrai qualquer /storage/... do URI
-  const storageMatch = str.match(/\/storage\/[^\s"']+/);
-  if (storageMatch) return storageMatch[0];
-
-  return null;
-}
-
 export const bridge = {
   refresh:        ()              => send('refresh'),
   startService:   (id)            => send('start-service',    { id }),
@@ -66,7 +37,7 @@ export const bridge = {
   stopAll:        ()              => send('stop-all'),
   openTunnel:     (id)            => send('open-tunnel',      { id }),
   closeTunnel:    (id)            => send('close-tunnel',     { id }),
-  setProjectsDir: (dir)           => send('set-projects-dir', { dir }),
+  setProjectsList:(projects)      => send('set-projects-list',{ projects }),
   saveConfig:     (cfg)           => send('save-config',      cfg),
   getConfig:      ()              => send('get-config'),
   testTelegram:   (token, chatId) => send('test-telegram',    { token, chatId }),
@@ -76,7 +47,5 @@ export const bridge = {
   onTunnelState:  (cb) => on('tunnel-state',  cb),
   onConfig:       (cb) => on('config',        cb),
   onTestResult:   (cb) => on('test-result',   cb),
+  send,
 };
-
-// Expõe send direto para o HomeScreen usar
-bridge.send = send;

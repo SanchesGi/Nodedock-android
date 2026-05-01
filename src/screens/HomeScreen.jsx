@@ -76,14 +76,14 @@ export default function HomeScreen(){
     setScanning(true);
     setProjects([]);
     try {
-      const found = await scanProjects(path);
+      const { found, debug } = await scanProjects(path);
       if (found.length === 0) {
         ToastAndroid.show('Nenhum projeto encontrado na pasta.', ToastAndroid.LONG);
         setScanning(false);
         return;
       }
       // Envia projetos encontrados para o backend Node.js processar
-      bridge.send('set-projects-list', { projects: found });
+      bridge.setProjectsList(found);
       ToastAndroid.show(`${found.length} projeto(s) encontrado(s)!`, ToastAndroid.SHORT);
     } catch(e) {
       ToastAndroid.show('Erro ao escanear: '+e.message, ToastAndroid.LONG);
