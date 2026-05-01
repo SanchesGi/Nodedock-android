@@ -8,6 +8,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -89,9 +92,6 @@ jobs:
         run: |
           printf "\nMYAPP_UPLOAD_STORE_FILE=nodedock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=nodedock\nMYAPP_UPLOAD_STORE_PASSWORD=nodedock123\nMYAPP_UPLOAD_KEY_PASSWORD=nodedock123\n" >> gradle.properties
 
-      - name: Show build.gradle for debug
-        run: cat NodeDockAndroid/android/app/build.gradle
-
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -104,7 +104,11 @@ jobs:
         working-directory: NodeDockAndroid/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tail -50
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: List APK output
+        if: always()
+        run: find NodeDockAndroid/android -name "*.apk" 2>/dev/null || echo "Nenhum APK gerado"
 
       - name: Upload APK
         if: success()
