@@ -1,4 +1,4 @@
-# NodeDock Android
+# SentriDock Android
 
 Gerenciador portátil de projetos Node.js para Android.  
 O APK é gerado automaticamente pelo GitHub Actions — **sem precisar de Android Studio ou Termux**.
@@ -22,14 +22,14 @@ O APK é gerado automaticamente pelo GitHub Actions — **sem precisar de Androi
    ```bash
    git init
    git add .
-   git commit -m "chore: initial NodeDock Android"
-   git remote add origin https://github.com/SEU_USUARIO/nodedock-android.git
+   git commit -m "chore: initial SentriDock Android"
+   git remote add origin https://github.com/SEU_USUARIO/sentridock-android.git
    git push -u origin main
    ```
 
 4. **Aguarde o build** (≈ 15–25 minutos na primeira vez)
    - Vá em **Actions** no seu repositório
-   - Acompanhe o progresso do workflow `Build NodeDock APK`
+   - Acompanhe o progresso do workflow `Build SentriDock APK`
 
 5. **Baixe o APK**
    - Após o build, vá em **Releases** e baixe o `.apk`
@@ -41,7 +41,7 @@ O APK é gerado automaticamente pelo GitHub Actions — **sem precisar de Androi
 
 1. Instale o APK (habilite "Fontes desconhecidas" se pedido)
 
-2. Abra o NodeDock e toque em **Selecionar** para escolher a pasta dos projetos
+2. Abra o SentriDock e toque em **Selecionar** para escolher a pasta dos projetos
 
 3. O app detecta automaticamente qualquer projeto Node.js na pasta selecionada  
    (pasta com `package.json` + `server.js` / `index.js` / `app.js`)
@@ -84,7 +84,7 @@ A URL gerada é enviada automaticamente para o Telegram.
 ## 🗂 Estrutura do repositório
 
 ```
-nodedock-android/
+sentridock-android/
 ├── .github/
 │   └── workflows/
 │       └── build-apk.yml      ← CI/CD completo

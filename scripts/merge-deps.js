@@ -1,6 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
-const p    = path.resolve(__dirname, '..', 'NodeDockAndroid', 'package.json');
+const p    = path.resolve(__dirname, '..', 'SentriDockAndroid', 'package.json');
 const pkg  = JSON.parse(fs.readFileSync(p, 'utf8'));
 pkg.dependencies = {
   ...pkg.dependencies,

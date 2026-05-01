@@ -1,7 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const p = path.resolve(__dirname, '..', 'NodeDockAndroid',
+const p = path.resolve(__dirname, '..', 'SentriDockAndroid',
   'node_modules', 'nodejs-mobile-react-native', 'android', 'build.gradle');
 
 if (!fs.existsSync(p)) { console.log('Não encontrado, pulando.'); process.exit(0); }

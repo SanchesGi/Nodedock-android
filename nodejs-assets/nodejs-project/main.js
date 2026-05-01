@@ -17,7 +17,7 @@ const telegram  = require('./telegram');
 const tunnels   = require('./tunnels');
 
 const BASE_PORT     = 3001;
-const CONFIG_FILE   = path.join(rn.app.datadir(), 'nodedock-config.json');
+const CONFIG_FILE   = path.join(rn.app.datadir(), 'sentridock-config.json');
 
 // ── Config ────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
@@ -261,7 +261,7 @@ async function handleTelegramCommand(cmd, args) {
       const turl = tunnels.getUrl(s.id);
       return `${icons[s.status] || '❓'} <b>${s.name}</b> :${s.port}${turl ? `\n   🌐 ${turl}` : ''}`;
     });
-    telegram.send(`<b>NodeDock — Status</b>\n\n${lines.join('\n\n')}`);
+    telegram.send(`<b>SentriDock — Status</b>\n\n${lines.join('\n\n')}`);
     return;
   }
   if (cmd === 'list') {
@@ -290,7 +290,7 @@ async function handleTelegramCommand(cmd, args) {
   }
   if (cmd === 'help') {
     telegram.send(
-      `<b>NodeDock — Comandos</b>\n\n` +
+      `<b>SentriDock — Comandos</b>\n\n` +
       `/status — status de todos\n/list — lista projetos\n` +
       `/start &lt;nome&gt; — inicia\n/stop &lt;nome&gt; — para\n` +
       `/tunnel &lt;nome&gt; — abre/fecha túnel\n/help — ajuda`

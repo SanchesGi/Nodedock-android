@@ -1,7 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const p = path.resolve(__dirname, '..', 'NodeDockAndroid', 'android', 'app', 'build.gradle');
+const p = path.resolve(__dirname, '..', 'SentriDockAndroid', 'android', 'app', 'build.gradle');
 let g = fs.readFileSync(p, 'utf8');
 
 if (!g.includes('abiFilters')) {

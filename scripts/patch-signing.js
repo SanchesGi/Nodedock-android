@@ -2,7 +2,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const buildGradlePath = path.resolve(__dirname, '..', 'NodeDockAndroid', 'android', 'app', 'build.gradle');
+const buildGradlePath = path.resolve(__dirname, '..', 'SentriDockAndroid', 'android', 'app', 'build.gradle');
 
 if (!fs.existsSync(buildGradlePath)) {
   console.error(`❌ Arquivo não encontrado: ${buildGradlePath}`);

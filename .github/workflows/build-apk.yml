@@ -1,4 +1,4 @@
-name: Build NodeDock APK
+name: Build SentriDock APK
 
 on:
   push:
@@ -41,30 +41,30 @@ jobs:
 
       - name: Init React Native project
         run: |
-          npx @react-native-community/cli@13 init NodeDockAndroid \
+          npx @react-native-community/cli@13 init SentriDockAndroid \
             --version 0.73.6 \
             --skip-install \
-            --title "NodeDock" \
-            --package-name "com.nodedock.android"
+            --title "SentriDock" \
+            --package-name "com.sentridock.android"
 
       - name: Overlay source files
         run: |
-          cp -f src/App.jsx NodeDockAndroid/App.jsx
-          cp -f index.js    NodeDockAndroid/index.js
-          mkdir -p NodeDockAndroid/src
-          cp -rf src/screens   NodeDockAndroid/src/screens
-          cp -rf src/lib       NodeDockAndroid/src/lib
-          cp -rf nodejs-assets NodeDockAndroid/nodejs-assets
+          cp -f src/App.jsx SentriDockAndroid/App.jsx
+          cp -f index.js    SentriDockAndroid/index.js
+          mkdir -p SentriDockAndroid/src
+          cp -rf src/screens   SentriDockAndroid/src/screens
+          cp -rf src/lib       SentriDockAndroid/src/lib
+          cp -rf nodejs-assets SentriDockAndroid/nodejs-assets
 
       - name: Merge package.json dependencies
         run: node scripts/merge-deps.js
 
       - name: Install React Native dependencies
-        working-directory: NodeDockAndroid
+        working-directory: SentriDockAndroid
         run: npm install
 
       - name: Install nodejs-mobile
-        working-directory: NodeDockAndroid
+        working-directory: SentriDockAndroid
         run: npm install nodejs-mobile-react-native
 
       - name: Patch nodejs-mobile internal gradle
@@ -74,26 +74,26 @@ jobs:
         run: node scripts/patch-gradle.js
 
       - name: Install Node.js backend dependencies
-        working-directory: NodeDockAndroid/nodejs-assets/nodejs-project
+        working-directory: SentriDockAndroid/nodejs-assets/nodejs-project
         run: npm install
 
       - name: Patch signing config
         run: node scripts/patch-signing.js
 
       - name: Generate release keystore
-        working-directory: NodeDockAndroid/android/app
+        working-directory: SentriDockAndroid/android/app
         run: |
           keytool -genkeypair -v \
-            -keystore nodedock-release.keystore \
-            -alias nodedock \
+            -keystore sentridock-release.keystore \
+            -alias sentridock \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass nodedock123 -keypass nodedock123 \
-            -dname "CN=NodeDock,O=NodeDock,C=BR"
+            -storepass sentridock123 -keypass sentridock123 \
+            -dname "CN=SentriDock,O=SentriDock,C=BR"
 
       - name: Configure signing
-        working-directory: NodeDockAndroid/android
+        working-directory: SentriDockAndroid/android
         run: |
-          printf "\nMYAPP_UPLOAD_STORE_FILE=nodedock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=nodedock\nMYAPP_UPLOAD_STORE_PASSWORD=nodedock123\nMYAPP_UPLOAD_KEY_PASSWORD=nodedock123\n" >> gradle.properties
+          printf "\nMYAPP_UPLOAD_STORE_FILE=sentridock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=sentridock\nMYAPP_UPLOAD_STORE_PASSWORD=sentridock123\nMYAPP_UPLOAD_KEY_PASSWORD=sentridock123\n" >> gradle.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -101,10 +101,10 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('NodeDockAndroid/android/**/*.gradle*') }}
+          key: gradle-${{ hashFiles('SentriDockAndroid/android/**/*.gradle*') }}
 
       - name: Build APK
-        working-directory: NodeDockAndroid/android
+        working-directory: SentriDockAndroid/android
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
@@ -113,8 +113,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: NodeDock-APK-v${{ github.run_number }}
-          path: NodeDockAndroid/android/app/build/outputs/apk/release/app-release.apk
+          name: SentriDock-APK-v${{ github.run_number }}
+          path: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Create Release
@@ -122,7 +122,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1.${{ github.run_number }}
-          name: NodeDock v0.1.${{ github.run_number }}
-          files: NodeDockAndroid/android/app/build/outputs/apk/release/app-release.apk
+          name: SentriDock v0.1.${{ github.run_number }}
+          files: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

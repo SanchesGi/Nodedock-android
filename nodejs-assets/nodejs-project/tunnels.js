@@ -15,7 +15,7 @@ async function open(id, port) {
     localtunnel = require('localtunnel');
   } catch {
     throw new Error(
-      'Pacote "localtunnel" não encontrado.\nExecute: npm install na pasta do NodeDock.'
+      'Pacote "localtunnel" não encontrado.\nExecute: npm install na pasta do SentriDock.'
     );
   }
 

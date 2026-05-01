@@ -86,7 +86,7 @@ class TelegramBot {
     try {
       const res = await this._req('sendMessage', {
         chat_id:    this.chatId,
-        text:       '✅ <b>NodeDock</b> conectado com sucesso!',
+        text:       '✅ <b>SentriDock</b> conectado com sucesso!',
         parse_mode: 'HTML',
       });
       if (res?.ok) return { ok: true };
