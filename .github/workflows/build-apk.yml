@@ -57,7 +57,19 @@ jobs:
           cp -rf nodejs-assets SentriDockAndroid/nodejs-assets
 
       - name: Merge package.json dependencies
-        run: node scripts/merge-deps.js
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/package.json';
+          const pkg=JSON.parse(fs.readFileSync(p,'utf8'));
+          pkg.dependencies={...pkg.dependencies,
+            'react-native-fs':'^2.20.0',
+            'react-native-document-picker':'^9.1.1',
+            '@react-native-async-storage/async-storage':'^1.21.0'
+          };
+          fs.writeFileSync(p,JSON.stringify(pkg,null,2));
+          console.log('OK');
+          "
 
       - name: Install React Native dependencies
         working-directory: SentriDockAndroid
@@ -68,17 +80,68 @@ jobs:
         run: npm install nodejs-mobile-react-native
 
       - name: Patch nodejs-mobile internal gradle
-        run: node scripts/patch-nodejs-mobile.js
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const p=path.resolve('SentriDockAndroid','node_modules','nodejs-mobile-react-native','android','build.gradle');
+          if(!fs.existsSync(p)){console.log('skip');process.exit(0);}
+          let g=fs.readFileSync(p,'utf8');
+          g=g.replace(/repositories\s*\{[^}]*\}/g,'repositories {\n        google()\n        mavenCentral()\n        maven { url \"https://dl.google.com/dl/android/maven2/\" }\n    }');
+          g=g.replace(/com\.android\.tools\.build:gradle:[0-9.]+/g,'com.android.tools.build:gradle:7.4.2');
+          fs.writeFileSync(p,g);
+          console.log('patched');
+          "
 
       - name: Patch app build.gradle
         run: node scripts/patch-gradle.js
+
+      - name: Patch AndroidManifest permissions
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const p=path.resolve('SentriDockAndroid','android','app','src','main','AndroidManifest.xml');
+          let xml=fs.readFileSync(p,'utf8');
+          const perms=\`
+            <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />
+            <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"29\" />
+            <uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" />
+            <uses-permission android:name=\"android.permission.INTERNET\" />
+            <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\`;
+          if(!xml.includes('MANAGE_EXTERNAL_STORAGE')){
+            xml=xml.replace('<uses-permission android:name=\"android.permission.INTERNET\" />',perms);
+          }
+          if(!xml.includes('requestLegacyExternalStorage')){
+            xml=xml.replace('<application',\`<application\n        android:requestLegacyExternalStorage=\"true\"\`);
+          }
+          fs.writeFileSync(p,xml);
+          console.log('manifest patched');
+          "
 
       - name: Install Node.js backend dependencies
         working-directory: SentriDockAndroid/nodejs-assets/nodejs-project
         run: npm install
 
       - name: Patch signing config
-        run: node scripts/patch-signing.js
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const p=path.resolve('SentriDockAndroid','android','app','build.gradle');
+          let g=fs.readFileSync(p,'utf8');
+          if(!g.includes('signingConfigs')){
+            g=g.replace(/android\s*\{/,\`android {
+              signingConfigs {
+                release {
+                  storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                  storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                  keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                  keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+                }
+              }\`);
+            g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
+          }
+          fs.writeFileSync(p,g);
+          console.log('signing patched');
+          "
 
       - name: Generate release keystore
         working-directory: SentriDockAndroid/android/app

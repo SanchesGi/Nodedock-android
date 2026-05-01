@@ -1,4 +1,4 @@
-import { NativeEventEmitter, Platform } from 'react-native';
+import { NativeEventEmitter } from 'react-native';
 import nodejs from 'nodejs-mobile-react-native';
 
 let _started  = false;
@@ -29,23 +29,32 @@ export function on(event, cb) {
   return () => { listeners[event] = (listeners[event] || []).filter(x => x !== cb); };
 }
 
-// Converte URI content:// para caminho real /storage/...
+// Converte qualquer URI/path para caminho absoluto real
 export function resolveRealPath(uri) {
   if (!uri) return null;
-  // Já é caminho real
-  if (uri.startsWith('/')) return uri;
-  // content://com.android.externalstorage.documents/tree/primary:Pasta
-  if (uri.includes('primary:')) {
-    const part = uri.split('primary:')[1];
-    const decoded = decodeURIComponent(part || '').split('/document/')[0];
-    return `/storage/emulated/0/${decoded}`;
+
+  const str = decodeURIComponent(String(uri));
+
+  // Já é caminho absoluto
+  if (str.startsWith('/storage') || str.startsWith('/sdcard')) return str;
+
+  // content://com.android.externalstorage.documents/tree/primary:Pasta/Sub
+  const primaryMatch = str.match(/primary:([^/\s]*)/);
+  if (primaryMatch) {
+    const rel = primaryMatch[1].replace(/:/g, '/');
+    return rel ? `/storage/emulated/0/${rel}` : '/storage/emulated/0';
   }
-  // Tenta extrair caminho direto
-  try {
-    const decoded = decodeURIComponent(uri);
-    const match = decoded.match(/\/storage\/[^"'\s]+/);
-    if (match) return match[0];
-  } catch {}
+
+  // content://...tree/...document/primary:Pasta
+  const docMatch = str.match(/document\/primary:(.+)/);
+  if (docMatch) {
+    return `/storage/emulated/0/${docMatch[1].replace(/:/g,'/')}`;
+  }
+
+  // Último recurso: extrai qualquer /storage/... do URI
+  const storageMatch = str.match(/\/storage\/[^\s"']+/);
+  if (storageMatch) return storageMatch[0];
+
   return null;
 }
 
