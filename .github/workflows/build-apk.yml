@@ -5,11 +5,11 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -52,8 +52,8 @@ jobs:
           cp -f src/App.jsx NodeDockAndroid/App.jsx
           cp -f index.js    NodeDockAndroid/index.js
           mkdir -p NodeDockAndroid/src
-          cp -rf src/screens NodeDockAndroid/src/screens
-          cp -rf src/lib     NodeDockAndroid/src/lib
+          cp -rf src/screens   NodeDockAndroid/src/screens
+          cp -rf src/lib       NodeDockAndroid/src/lib
           cp -rf nodejs-assets NodeDockAndroid/nodejs-assets
 
       - name: Merge package.json dependencies
@@ -63,13 +63,14 @@ jobs:
         working-directory: NodeDockAndroid
         run: npm install
 
-      - name: Install nodejs-mobile-react-native
+      - name: Install nodejs-mobile
         working-directory: NodeDockAndroid
         run: npm install @nodejs-mobile/react-native@0.3.0
 
-      - name: Patch nodejs-mobile build.gradle
+      - name: Patch nodejs-mobile internal gradle
+        run: node scripts/patch-nodejs-mobile.js
 
-      - name: Patch gradle for nodejs-mobile
+      - name: Patch app build.gradle
         run: node scripts/patch-gradle.js
 
       - name: Install Node.js backend dependencies
@@ -107,10 +108,6 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
-
-      - name: List APK output
-        if: always()
-        run: find NodeDockAndroid/android -name "*.apk" 2>/dev/null || echo "Nenhum APK gerado"
 
       - name: Upload APK
         if: success()

@@ -1,27 +1,17 @@
 const fs   = require('fs');
 const path = require('path');
 
-const buildGradlePath = path.resolve(__dirname, '..', 'NodeDockAndroid', 'android', 'app', 'build.gradle');
-let gradle = fs.readFileSync(buildGradlePath, 'utf8');
+const p = path.resolve(__dirname, '..', 'NodeDockAndroid', 'android', 'app', 'build.gradle');
+let g = fs.readFileSync(p, 'utf8');
 
-// Adiciona abiFilters se não existir
-if (!gradle.includes('abiFilters')) {
-  gradle = gradle.replace(
-    /defaultConfig\s*\{/,
-    `defaultConfig {\n        ndk {\n            abiFilters "arm64-v8a", "x86_64"\n        }`
-  );
+if (!g.includes('abiFilters')) {
+  g = g.replace(/defaultConfig\s*\{/,
+    `defaultConfig {\n        ndk {\n            abiFilters "arm64-v8a", "x86_64"\n        }`);
+}
+if (!g.includes('packagingOptions')) {
+  g = g.replace(/buildTypes\s*\{/,
+    `packagingOptions {\n        pickFirst '**/libnode.so'\n        pickFirst '**/libc++_shared.so'\n    }\n    buildTypes {`);
 }
 
-// Adiciona packagingOptions para evitar conflito de .so
-if (!gradle.includes('packagingOptions')) {
-  gradle = gradle.replace(
-    /buildTypes\s*\{/,
-    `packagingOptions {
-        pickFirst '**/libnode.so'
-        pickFirst '**/libc++_shared.so'
-    }\n    buildTypes {`
-  );
-}
-
-fs.writeFileSync(buildGradlePath, gradle);
-console.log('✅ build.gradle patchado com sucesso.');
+fs.writeFileSync(p, g);
+console.log('✅ app build.gradle patchado.');
