@@ -3,7 +3,7 @@ import {
   SafeAreaView, StatusBar, StyleSheet, View,
   TouchableOpacity, Text, Animated, PermissionsAndroid, Platform
 } from 'react-native';
-import HomeScreen    from './src/screens/HomeScreen';
+import HomeScreen     from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { initBridge } from './src/lib/bridge';
 
@@ -19,11 +19,6 @@ async function requestPermissions() {
       PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
       PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
     ]);
-    // Android 11+ precisa de MANAGE_EXTERNAL_STORAGE via Intent
-    if (Platform.Version >= 30) {
-      const { IntentLauncher } = require('expo-intent-launcher') || {};
-      // Ignora se não tiver — a permissão básica já permite leitura
-    }
   } catch (e) {
     console.warn('Permissão negada:', e);
   }
