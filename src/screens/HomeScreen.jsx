@@ -1,8 +1,7 @@
 import React,{useEffect,useRef,useState,useCallback}from 'react';
 import{View,Text,StyleSheet,FlatList,TouchableOpacity,ScrollView,RefreshControl,ToastAndroid,Clipboard,Linking,Alert}from 'react-native';
-import DocumentPicker from 'react-native-document-picker';
 import{bridge}from '../lib/bridge';
-import{scanProjects}from '../lib/scanner';
+import{scanProjects,pickDirectory}from '../lib/scanner';
 
 const PAL=['#00c8e0','#f5a623','#22d36b','#7c8ff5','#f572c0','#ff7744'];
 const SL={stopped:'Parado',starting:'Iniciando…',running:'Rodando',error:'Erro',missing:'Não encontrado'};
@@ -40,19 +39,16 @@ export default function HomeScreen(){
     return()=>u.forEach(f=>f());
   },[]);
 
-  const pickDir=async()=>{
+  const handlePickDir=async()=>{
     try{
-      const r=await DocumentPicker.pickDirectory();
-      // Usa a URI bruta diretamente — sem converter
-      const uri=r?.uri||String(r);
+      const uri=await pickDirectory();
+      if(!uri)return;
       setDirUri(uri);
-      // Label legível
-      const label=decodeURIComponent(uri).split('primary:').pop().split('/document/')[0]||uri;
+      const label=decodeURIComponent(uri).split('primary:').pop().split('/document/')[0]||'pasta selecionada';
       setDirLabel(label);
       await doScan(uri);
     }catch(e){
-      if(!DocumentPicker.isCancel(e))
-        Alert.alert('Erro',e.message);
+      Alert.alert('Erro ao selecionar pasta',e.message);
     }
   };
 
@@ -62,9 +58,7 @@ export default function HomeScreen(){
     setProjects([]);
     const{found,debug}=await scanProjects(uri);
     if(found.length===0){
-      Alert.alert('Nenhum projeto encontrado',
-        debug+'\n\nDica: selecione a pasta que contém as subpastas dos projetos.',
-        [{text:'OK'}]);
+      Alert.alert('Nenhum projeto encontrado',debug,[{text:'OK'}]);
     }else{
       bridge.setProjectsList(found);
       ToastAndroid.show(`${found.length} projeto(s) encontrado(s)!`,ToastAndroid.SHORT);
@@ -131,78 +125,35 @@ export default function HomeScreen(){
     <View style={st.root}>
       <View style={st.db}>
         <View style={{flex:1}}>
-          <Text style={st.dl} numberOfLines={1}>
-            {dirLabel?`📁 ${dirLabel}`:'📁 Nenhuma pasta selecionada'}
-          </Text>
-          {dirUri&&<Text style={st.dlsub} numberOfLines={1}>{dirUri.slice(0,60)}…</Text>}
+          <Text style={st.dl} numberOfLines={1}>{dirLabel?`📁 ${dirLabel}`:'📁 Nenhuma pasta selecionada'}</Text>
         </View>
-        <TouchableOpacity style={st.bdb} onPress={pickDir}>
+        <TouchableOpacity style={st.bdb} onPress={handlePickDir}>
           <Text style={st.bdbt}>Selecionar</Text>
         </TouchableOpacity>
       </View>
-
       <View style={st.ga}>
-        <TouchableOpacity style={st.bg} onPress={()=>bridge.startAll()}>
-          <Text style={st.bgt}>▶▶ Todos</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[st.bg,st.bgd]} onPress={()=>bridge.stopAll()}>
-          <Text style={[st.bgt,{color:'#ff5555'}]}>⏹ Parar</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={st.bg} onPress={()=>bridge.startAll()}><Text style={st.bgt}>▶▶ Todos</Text></TouchableOpacity>
+        <TouchableOpacity style={[st.bg,st.bgd]} onPress={()=>bridge.stopAll()}><Text style={[st.bgt,{color:'#ff5555'}]}>⏹ Parar</Text></TouchableOpacity>
         <TouchableOpacity style={[st.bg,(!dirUri||scanning)&&st.bd]} onPress={()=>doScan(dirUri)} disabled={!dirUri||scanning}>
           <Text style={st.bgt}>{scanning?'⏳ Scan…':'↻ Scan'}</Text>
         </TouchableOpacity>
       </View>
-
-      <FlatList
-        data={projects}
-        keyExtractor={p=>p.id}
-        renderItem={renderProject}
-        style={st.list}
-        contentContainerStyle={st.lc}
+      <FlatList data={projects} keyExtractor={p=>p.id} renderItem={renderProject} style={st.list} contentContainerStyle={st.lc}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00c8e0"/>}
-        ListEmptyComponent={
-          <View style={st.empty}>
-            <Text style={st.ei}>{scanning?'⏳':'📦'}</Text>
-            <Text style={st.em}>
-              {scanning?'Escaneando projetos…':
-               dirUri?'Nenhum projeto encontrado.\nA pasta selecionada deve conter subpastas com package.json':
-               'Toque em Selecionar para escolher\na pasta dos seus projetos.'}
-            </Text>
-          </View>
-        }
+        ListEmptyComponent={<View style={st.empty}>
+          <Text style={st.ei}>{scanning?'⏳':'📦'}</Text>
+          <Text style={st.em}>{scanning?'Escaneando…':dirUri?'Nenhum projeto encontrado.':'Toque em Selecionar para escolher\na pasta dos seus projetos.'}</Text>
+        </View>}
       />
-
       <View style={st.lw}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.lf}>
-          <TouchableOpacity style={[st.fb,selLog==='all'&&st.fba]} onPress={()=>setSelLog('all')}>
-            <Text style={[st.ft,selLog==='all'&&st.fta]}>Todos</Text>
-          </TouchableOpacity>
-          {projects.map((p,i)=>(
-            <TouchableOpacity key={p.id} style={[st.fb,selLog===p.id&&{borderColor:PAL[i%PAL.length]}]} onPress={()=>setSelLog(p.id)}>
-              <Text style={[st.ft,selLog===p.id&&{color:PAL[i%PAL.length]}]}>{p.name.length>10?p.name.slice(0,10)+'…':p.name}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity style={st.fb} onPress={()=>{logsRef.current=[];setLogs([]);}}>
-            <Text style={[st.ft,{color:'#ff5555'}]}>✕</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[st.fb,selLog==='all'&&st.fba]} onPress={()=>setSelLog('all')}><Text style={[st.ft,selLog==='all'&&st.fta]}>Todos</Text></TouchableOpacity>
+          {projects.map((p,i)=>(<TouchableOpacity key={p.id} style={[st.fb,selLog===p.id&&{borderColor:PAL[i%PAL.length]}]} onPress={()=>setSelLog(p.id)}><Text style={[st.ft,selLog===p.id&&{color:PAL[i%PAL.length]}]}>{p.name.length>10?p.name.slice(0,10)+'…':p.name}</Text></TouchableOpacity>))}
+          <TouchableOpacity style={st.fb} onPress={()=>{logsRef.current=[];setLogs([]);}}><Text style={[st.ft,{color:'#ff5555'}]}>✕</Text></TouchableOpacity>
         </ScrollView>
         <ScrollView ref={scrollRef} style={st.lb} nestedScrollEnabled>
-          {filteredLogs.length===0
-            ?<Text style={st.le}>📡 Logs aparecerão aqui.</Text>
-            :filteredLogs.map(l=>{
-              const pi=projects.findIndex(p=>p.id===l.id);
-              const c=PAL[Math.max(pi,0)%PAL.length];
-              return(
-                <View key={l.key} style={st.ll}>
-                  <Text style={st.lt}>{l.time}</Text>
-                  <View style={[st.ltg,{backgroundColor:c+'22'}]}>
-                    <Text style={[st.ltgt,{color:c}]}>{(projects[pi]?.name||l.id).slice(0,8)}</Text>
-                  </View>
-                  <Text style={[st.lm,l.type==='err'&&st.le2]} selectable>{l.text}</Text>
-                </View>
-              );
-            })
-          }
+          {filteredLogs.length===0?<Text style={st.le}>📡 Logs aparecerão aqui.</Text>
+          :filteredLogs.map(l=>{const pi=projects.findIndex(p=>p.id===l.id);const c=PAL[Math.max(pi,0)%PAL.length];return(<View key={l.key} style={st.ll}><Text style={st.lt}>{l.time}</Text><View style={[st.ltg,{backgroundColor:c+'22'}]}><Text style={[st.ltgt,{color:c}]}>{(projects[pi]?.name||l.id).slice(0,8)}</Text></View><Text style={[st.lm,l.type==='err'&&st.le2]} selectable>{l.text}</Text></View>);})}
         </ScrollView>
       </View>
     </View>
@@ -213,7 +164,6 @@ const st=StyleSheet.create({
   root:{flex:1,backgroundColor:'#0b0d13'},
   db:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:14,paddingVertical:10,backgroundColor:'#12151f',borderBottomWidth:1,borderBottomColor:'#1f2535'},
   dl:{fontSize:11,color:'#c8d0e8',fontFamily:'monospace'},
-  dlsub:{fontSize:9,color:'#3a4260',fontFamily:'monospace',marginTop:2},
   bdb:{paddingHorizontal:12,paddingVertical:8,borderRadius:7,borderWidth:1,borderColor:'#00c8e0',backgroundColor:'rgba(0,200,224,.08)'},
   bdbt:{fontSize:11,color:'#00c8e0',fontWeight:'700'},
   ga:{flexDirection:'row',gap:7,padding:10,paddingBottom:6},
@@ -223,16 +173,14 @@ const st=StyleSheet.create({
   bd:{opacity:.35},
   list:{flex:1},lc:{padding:12,gap:10},
   card:{backgroundColor:'#181c28',borderRadius:12,borderWidth:1,borderColor:'#1f2535',overflow:'hidden'},
-  accent:{height:2},
-  ch:{flexDirection:'row',alignItems:'flex-start',padding:13,gap:10},
+  accent:{height:2},ch:{flexDirection:'row',alignItems:'flex-start',padding:13,gap:10},
   cm:{flex:1},cn:{fontSize:14,fontWeight:'900',color:'#c8d0e8'},
   csr:{flexDirection:'row',alignItems:'center',gap:6,marginTop:4},
   pp:{borderWidth:1,borderRadius:5,paddingHorizontal:6,paddingVertical:1},
   ppt:{fontSize:10,fontFamily:'monospace',fontWeight:'700'},
   cd:{fontSize:10,color:'#5a6480',flex:1},
   badge:{flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:9,paddingVertical:4,borderRadius:20,borderWidth:1},
-  dot:{width:6,height:6,borderRadius:3},
-  badget:{fontSize:10,fontFamily:'monospace',fontWeight:'700'},
+  dot:{width:6,height:6,borderRadius:3},badget:{fontSize:10,fontFamily:'monospace',fontWeight:'700'},
   mw:{marginHorizontal:13,marginBottom:8,padding:8,borderRadius:7,backgroundColor:'rgba(245,166,35,.06)',borderWidth:1,borderColor:'rgba(245,166,35,.2)'},
   mt:{fontSize:10,color:'#f5a623',fontFamily:'monospace'},
   tb:{flexDirection:'row',alignItems:'center',marginHorizontal:13,marginBottom:8,padding:8,borderRadius:7,backgroundColor:'rgba(34,211,107,.06)',borderWidth:1,borderColor:'rgba(34,211,107,.2)'},
@@ -241,25 +189,19 @@ const st=StyleSheet.create({
   tot:{fontSize:10,color:'#7c8ff5',fontFamily:'monospace'},
   ca:{flexDirection:'row',gap:7,padding:13,paddingTop:0},
   ba:{flex:1,paddingVertical:8,borderRadius:8,borderWidth:1,borderColor:'#2a3148',backgroundColor:'#12151f',alignItems:'center'},
-  bat:{fontSize:12,color:'#c8d0e8',fontWeight:'700'},
-  bdt:{color:'#5a6480'},
+  bat:{fontSize:12,color:'#c8d0e8',fontWeight:'700'},bdt:{color:'#5a6480'},
   bi:{width:36,paddingVertical:8,borderRadius:8,borderWidth:1,borderColor:'#2a3148',backgroundColor:'#12151f',alignItems:'center'},
-  bit:{fontSize:13},
-  bta:{borderColor:'#22d36b',backgroundColor:'rgba(34,211,107,.1)'},
+  bit:{fontSize:13},bta:{borderColor:'#22d36b',backgroundColor:'rgba(34,211,107,.1)'},
   empty:{flex:1,alignItems:'center',paddingTop:40,gap:12,paddingHorizontal:24},
-  ei:{fontSize:36,opacity:.4},
-  em:{fontSize:12,color:'#3a4260',fontFamily:'monospace',textAlign:'center',lineHeight:22},
+  ei:{fontSize:36,opacity:.4},em:{fontSize:12,color:'#3a4260',fontFamily:'monospace',textAlign:'center',lineHeight:22},
   lw:{height:190,backgroundColor:'#12151f',borderTopWidth:1,borderTopColor:'#1f2535'},
   lf:{flexGrow:0,paddingHorizontal:10,paddingVertical:6,borderBottomWidth:1,borderBottomColor:'#1f2535'},
   fb:{paddingHorizontal:12,paddingVertical:4,borderRadius:5,borderWidth:1,borderColor:'#2a3148',marginRight:6},
-  fba:{backgroundColor:'rgba(90,100,128,.15)'},
-  ft:{fontSize:10,color:'#5a6480',fontFamily:'monospace'},fta:{color:'#c8d0e8'},
-  lb:{flex:1,padding:8},
-  le:{fontSize:11,color:'#3a4260',fontFamily:'monospace',textAlign:'center',marginTop:16},
+  fba:{backgroundColor:'rgba(90,100,128,.15)'},ft:{fontSize:10,color:'#5a6480',fontFamily:'monospace'},fta:{color:'#c8d0e8'},
+  lb:{flex:1,padding:8},le:{fontSize:11,color:'#3a4260',fontFamily:'monospace',textAlign:'center',marginTop:16},
   ll:{flexDirection:'row',gap:6,marginBottom:2,alignItems:'flex-start'},
   lt:{fontSize:9,color:'#3a4260',fontFamily:'monospace',paddingTop:2,width:60},
   ltg:{borderRadius:4,paddingHorizontal:5,paddingVertical:1,alignSelf:'flex-start'},
   ltgt:{fontSize:9,fontFamily:'monospace',fontWeight:'700'},
-  lm:{flex:1,fontSize:10,color:'#c8d0e8',fontFamily:'monospace',lineHeight:16},
-  le2:{color:'#ff5555'},
+  lm:{flex:1,fontSize:10,color:'#c8d0e8',fontFamily:'monospace',lineHeight:16},le2:{color:'#ff5555'},
 });
