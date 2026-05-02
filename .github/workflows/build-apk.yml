@@ -56,39 +56,26 @@ jobs:
           cp -rf src/lib       SentriDockAndroid/src/lib
           cp -rf nodejs-assets SentriDockAndroid/nodejs-assets
 
-      - name: Install icon tool and resize icon
+      - name: Apply custom icon
         run: |
-          npm install -g sharp-cli 2>/dev/null || true
           pip install Pillow --break-system-packages -q
-
-          # Gera ícones em todos os tamanhos necessários
           python3 << 'PYEOF'
           from PIL import Image
-          import os, shutil
-
+          import os
           src = 'assets/icon.png'
           if not os.path.exists(src):
-            print('Ícone não encontrado, usando padrão.')
+            print('Sem ícone customizado, usando padrão.')
             exit(0)
-
-          sizes = {
-            'mipmap-mdpi':    48,
-            'mipmap-hdpi':    72,
-            'mipmap-xhdpi':   96,
-            'mipmap-xxhdpi':  144,
-            'mipmap-xxxhdpi': 192,
-          }
-
+          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
           base = 'SentriDockAndroid/android/app/src/main/res'
           img  = Image.open(src).convert('RGBA')
-
-          for folder, size in sizes.items():
-            out_dir = f'{base}/{folder}'
-            os.makedirs(out_dir, exist_ok=True)
-            resized = img.resize((size, size), Image.LANCZOS)
-            resized.save(f'{out_dir}/ic_launcher.png')
-            resized.save(f'{out_dir}/ic_launcher_round.png')
-            print(f'✅ {folder}: {size}x{size}')
+          for folder,size in sizes.items():
+            d = f'{base}/{folder}'
+            os.makedirs(d, exist_ok=True)
+            r = img.resize((size,size), Image.LANCZOS)
+            r.save(f'{d}/ic_launcher.png')
+            r.save(f'{d}/ic_launcher_round.png')
+            print(f'✅ {folder} {size}px')
           PYEOF
 
       - name: Merge package.json dependencies
@@ -114,53 +101,34 @@ jobs:
         working-directory: SentriDockAndroid
         run: npm install nodejs-mobile-react-native
 
-      - name: Patch nodejs-mobile internal gradle
+      - name: Patch nodejs-mobile gradle
         run: |
           node -e "
           const fs=require('fs'),path=require('path');
-          const p=path.resolve('SentriDockAndroid','node_modules','nodejs-mobile-react-native','android','build.gradle');
-          if(!fs.existsSync(p)){console.log('skip');process.exit(0);}
+          const p='SentriDockAndroid/node_modules/nodejs-mobile-react-native/android/build.gradle';
+          if(!fs.existsSync(p)){process.exit(0);}
           let g=fs.readFileSync(p,'utf8');
           g=g.replace(/repositories\s*\{[^}]*\}/g,'repositories {\n        google()\n        mavenCentral()\n        maven { url \"https://dl.google.com/dl/android/maven2/\" }\n    }');
           g=g.replace(/com\.android\.tools\.build:gradle:[0-9.]+/g,'com.android.tools.build:gradle:7.4.2');
-          fs.writeFileSync(p,g);
-          console.log('patched');
+          fs.writeFileSync(p,g);console.log('OK');
           "
 
       - name: Patch app build.gradle
         run: |
           node -e "
-          const fs=require('fs'),path=require('path');
-          const p=path.resolve('SentriDockAndroid','android','app','build.gradle');
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/build.gradle';
           let g=fs.readFileSync(p,'utf8');
-          if(!g.includes('abiFilters')){g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk {\n            abiFilters \"arm64-v8a\", \"x86_64\"\n        }');}
-          if(!g.includes('packagingOptions')){g=g.replace(/buildTypes\s*\{/,'packagingOptions {\n        pickFirst \"**/libnode.so\"\n        pickFirst \"**/libc++_shared.so\"\n    }\n    buildTypes {');}
-          fs.writeFileSync(p,g);
-          console.log('patched');
+          if(!g.includes('abiFilters'))g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk { abiFilters \"arm64-v8a\", \"x86_64\" }');
+          if(!g.includes('packagingOptions'))g=g.replace(/buildTypes\s*\{/,'packagingOptions { pickFirst \"**/libnode.so\"; pickFirst \"**/libc++_shared.so\" }\n    buildTypes {');
+          fs.writeFileSync(p,g);console.log('OK');
           "
 
       - name: Patch AndroidManifest permissions
-        run: |
-          node -e "
-          const fs=require('fs'),path=require('path');
-          const p=path.resolve('SentriDockAndroid','android','app','src','main','AndroidManifest.xml');
-          let xml=fs.readFileSync(p,'utf8');
-          const perms=[
-            '<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />',
-            '<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"29\" />',
-            '<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" />',
-            '<uses-permission android:name=\"android.permission.INTERNET\" />',
-            '<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />',
-          ].join('\n    ');
-          if(!xml.includes('MANAGE_EXTERNAL_STORAGE')){
-            xml=xml.replace('<uses-permission android:name=\"android.permission.INTERNET\" />',perms);
-          }
-          if(!xml.includes('requestLegacyExternalStorage')){
-            xml=xml.replace('<application',\`<application\n        android:requestLegacyExternalStorage=\"true\"\`);
-          }
-          fs.writeFileSync(p,xml);
-          console.log('manifest patched');
-          "
+        run: node scripts/patch-manifest.js
+
+      - name: Verify manifest
+        run: cat SentriDockAndroid/android/app/src/main/AndroidManifest.xml
 
       - name: Install Node.js backend dependencies
         working-directory: SentriDockAndroid/nodejs-assets/nodejs-project
@@ -169,18 +137,17 @@ jobs:
       - name: Patch signing config
         run: |
           node -e "
-          const fs=require('fs'),path=require('path');
-          const p=path.resolve('SentriDockAndroid','android','app','build.gradle');
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/build.gradle';
           let g=fs.readFileSync(p,'utf8');
           if(!g.includes('signingConfigs')){
-            g=g.replace(/android\s*\{/,'android {\n    signingConfigs {\n        release {\n            storeFile file(MYAPP_UPLOAD_STORE_FILE)\n            storePassword MYAPP_UPLOAD_STORE_PASSWORD\n            keyAlias MYAPP_UPLOAD_KEY_ALIAS\n            keyPassword MYAPP_UPLOAD_KEY_PASSWORD\n        }\n    }');
+            g=g.replace(/android\s*\{/,'android {\n    signingConfigs { release { storeFile file(MYAPP_UPLOAD_STORE_FILE); storePassword MYAPP_UPLOAD_STORE_PASSWORD; keyAlias MYAPP_UPLOAD_KEY_ALIAS; keyPassword MYAPP_UPLOAD_KEY_PASSWORD } }');
             g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
           }
-          fs.writeFileSync(p,g);
-          console.log('signing patched');
+          fs.writeFileSync(p,g);console.log('OK');
           "
 
-      - name: Generate release keystore
+      - name: Generate keystore
         working-directory: SentriDockAndroid/android/app
         run: |
           keytool -genkeypair -v \
@@ -192,8 +159,7 @@ jobs:
 
       - name: Configure signing
         working-directory: SentriDockAndroid/android
-        run: |
-          printf "\nMYAPP_UPLOAD_STORE_FILE=sentridock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=sentridock\nMYAPP_UPLOAD_STORE_PASSWORD=sentridock123\nMYAPP_UPLOAD_KEY_PASSWORD=sentridock123\n" >> gradle.properties
+        run: printf "\nMYAPP_UPLOAD_STORE_FILE=sentridock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=sentridock\nMYAPP_UPLOAD_STORE_PASSWORD=sentridock123\nMYAPP_UPLOAD_KEY_PASSWORD=sentridock123\n" >> gradle.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
