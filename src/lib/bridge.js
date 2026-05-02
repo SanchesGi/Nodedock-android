@@ -1,7 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
 import nodejs from 'nodejs-mobile-react-native';
 
-let _started  = false;
+let _started = false;
 const emitter = new NativeEventEmitter(nodejs.channel);
 const listeners = {};
 
@@ -30,22 +30,30 @@ export function on(event, cb) {
 }
 
 export const bridge = {
-  refresh:        ()              => send('refresh'),
-  startService:   (id)            => send('start-service',    { id }),
-  stopService:    (id)            => send('stop-service',     { id }),
-  startAll:       ()              => send('start-all'),
-  stopAll:        ()              => send('stop-all'),
-  openTunnel:     (id)            => send('open-tunnel',      { id }),
-  closeTunnel:    (id)            => send('close-tunnel',     { id }),
-  setProjectsList:(projects)      => send('set-projects-list',{ projects }),
-  saveConfig:     (cfg)           => send('save-config',      cfg),
-  getConfig:      ()              => send('get-config'),
-  testTelegram:   (token, chatId) => send('test-telegram',    { token, chatId }),
+  // permissão / picker
+  checkAccess:    ()        => send('check-access'),
+  listDir:        (p)       => send('list-dir', { path: p }),
+  // projetos
+  refresh:        ()        => send('refresh'),
+  startService:   (id)      => send('start-service', { id }),
+  stopService:    (id)      => send('stop-service',  { id }),
+  startAll:       ()        => send('start-all'),
+  stopAll:        ()        => send('stop-all'),
+  // tunnels
+  openTunnel:     (id)      => send('open-tunnel',  { id }),
+  closeTunnel:    (id)      => send('close-tunnel', { id }),
+  // config
+  setProjectsDir: (dir)     => send('set-projects-dir', { dir }),
+  saveConfig:     (cfg)     => send('save-config', cfg),
+  getConfig:      ()        => send('get-config'),
+  testTelegram:   (t, c)    => send('test-telegram', { token: t, chatId: c }),
+  // listeners
+  onAccessState:  (cb) => on('access-state',  cb),
+  onDirListing:   (cb) => on('dir-listing',   cb),
   onProjectsList: (cb) => on('projects-list', cb),
   onServiceState: (cb) => on('service-state', cb),
   onLog:          (cb) => on('log',           cb),
   onTunnelState:  (cb) => on('tunnel-state',  cb),
   onConfig:       (cb) => on('config',        cb),
   onTestResult:   (cb) => on('test-result',   cb),
-  send,
 };

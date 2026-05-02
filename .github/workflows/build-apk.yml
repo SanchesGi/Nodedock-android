@@ -64,7 +64,7 @@ jobs:
           import os
           src = 'assets/icon.png'
           if not os.path.exists(src):
-              print('Sem ícone customizado.')
+              print('Sem icone customizado.')
               exit(0)
           sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
           base = 'SentriDockAndroid/android/app/src/main/res'
@@ -75,7 +75,6 @@ jobs:
               r = img.resize((size,size), Image.LANCZOS)
               r.save(f'{d}/ic_launcher.png')
               r.save(f'{d}/ic_launcher_round.png')
-              print(f'OK {folder} {size}px')
           PYEOF
 
       - name: Merge package.json dependencies
@@ -85,11 +84,9 @@ jobs:
           const p='SentriDockAndroid/package.json';
           const pkg=JSON.parse(fs.readFileSync(p,'utf8'));
           pkg.dependencies={...pkg.dependencies,
-            'react-native-fs':'^2.20.0',
             '@react-native-async-storage/async-storage':'^1.21.0'
           };
           fs.writeFileSync(p,JSON.stringify(pkg,null,2));
-          console.log('OK');
           "
 
       - name: Install React Native dependencies
@@ -109,7 +106,7 @@ jobs:
           let g=fs.readFileSync(p,'utf8');
           g=g.replace(/repositories\s*\{[^}]*\}/g,'repositories {\n        google()\n        mavenCentral()\n        maven { url \"https://dl.google.com/dl/android/maven2/\" }\n    }');
           g=g.replace(/com\.android\.tools\.build:gradle:[0-9.]+/g,'com.android.tools.build:gradle:7.4.2');
-          fs.writeFileSync(p,g);console.log('OK');
+          fs.writeFileSync(p,g);
           "
 
       - name: Patch app build.gradle (NDK + packaging)
@@ -120,18 +117,34 @@ jobs:
           let g=fs.readFileSync(p,'utf8');
           if(!g.includes('abiFilters'))g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk { abiFilters \"arm64-v8a\", \"x86_64\" }');
           if(!g.includes('packagingOptions'))g=g.replace(/buildTypes\s*\{/,'packagingOptions { pickFirst \"**/libnode.so\"; pickFirst \"**/libc++_shared.so\" }\n    buildTypes {');
-          fs.writeFileSync(p,g);console.log('OK');
+          fs.writeFileSync(p,g);
           "
 
-      - name: Patch AndroidManifest (INTERNET only)
+      - name: Patch AndroidManifest (storage permissions)
         run: |
           node -e "
           const fs=require('fs');
           const p='SentriDockAndroid/android/app/src/main/AndroidManifest.xml';
           let m=fs.readFileSync(p,'utf8');
-          if(!m.includes('android.permission.INTERNET'))
-            m=m.replace('<application','<uses-permission android:name=\"android.permission.INTERNET\" />\n    <application');
-          fs.writeFileSync(p,m);console.log('OK');
+          const perms = [
+            '<uses-permission android:name=\"android.permission.INTERNET\" />',
+            '<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />',
+            '<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />',
+            '<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" tools:ignore=\"ScopedStorage\" />'
+          ];
+          // Adiciona namespace tools se faltar
+          if(!m.includes('xmlns:tools='))
+            m=m.replace('xmlns:android=','xmlns:tools=\"http://schemas.android.com/tools\"\n    xmlns:android=');
+          // Adiciona requestLegacyExternalStorage no application
+          if(!m.includes('requestLegacyExternalStorage'))
+            m=m.replace('<application','<application\n      android:requestLegacyExternalStorage=\"true\"');
+          // Adiciona permissões (cada uma individualmente, se não estiver lá)
+          for(const perm of perms){
+            const name = perm.match(/android:name=\"([^\"]+)\"/)[1];
+            if(!m.includes(name)) m = m.replace('<application', perm + '\n    <application');
+          }
+          fs.writeFileSync(p,m);
+          console.log('OK manifest patched');
           "
 
       - name: Verify manifest
@@ -151,7 +164,7 @@ jobs:
             g=g.replace(/android\s*\{/,'android {\n    signingConfigs { release { storeFile file(MYAPP_UPLOAD_STORE_FILE); storePassword MYAPP_UPLOAD_STORE_PASSWORD; keyAlias MYAPP_UPLOAD_KEY_ALIAS; keyPassword MYAPP_UPLOAD_KEY_PASSWORD } }');
             g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
           }
-          fs.writeFileSync(p,g);console.log('OK');
+          fs.writeFileSync(p,g);
           "
 
       - name: Generate keystore
@@ -194,8 +207,8 @@ jobs:
         if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: SentriDock v0.1.${{ github.run_number }}
+          tag_name: v0.2.${{ github.run_number }}
+          name: SentriDock v0.2.${{ github.run_number }}
           files: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
