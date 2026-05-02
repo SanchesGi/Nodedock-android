@@ -64,18 +64,18 @@ jobs:
           import os
           src = 'assets/icon.png'
           if not os.path.exists(src):
-            print('Sem ícone customizado.')
-            exit(0)
+              print('Sem ícone customizado.')
+              exit(0)
           sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
           base = 'SentriDockAndroid/android/app/src/main/res'
           img = Image.open(src).convert('RGBA')
           for folder,size in sizes.items():
-            d = f'{base}/{folder}'
-            os.makedirs(d, exist_ok=True)
-            r = img.resize((size,size), Image.LANCZOS)
-            r.save(f'{d}/ic_launcher.png')
-            r.save(f'{d}/ic_launcher_round.png')
-            print(f'✅ {folder} {size}px')
+              d = f'{base}/{folder}'
+              os.makedirs(d, exist_ok=True)
+              r = img.resize((size,size), Image.LANCZOS)
+              r.save(f'{d}/ic_launcher.png')
+              r.save(f'{d}/ic_launcher_round.png')
+              print(f'OK {folder} {size}px')
           PYEOF
 
       - name: Merge package.json dependencies
@@ -85,7 +85,7 @@ jobs:
           const p='SentriDockAndroid/package.json';
           const pkg=JSON.parse(fs.readFileSync(p,'utf8'));
           pkg.dependencies={...pkg.dependencies,
-            'react-native-saf-x':'^1.3.5',
+            'react-native-fs':'^2.20.0',
             '@react-native-async-storage/async-storage':'^1.21.0'
           };
           fs.writeFileSync(p,JSON.stringify(pkg,null,2));
@@ -112,7 +112,7 @@ jobs:
           fs.writeFileSync(p,g);console.log('OK');
           "
 
-      - name: Patch app build.gradle
+      - name: Patch app build.gradle (NDK + packaging)
         run: |
           node -e "
           const fs=require('fs');
@@ -123,8 +123,16 @@ jobs:
           fs.writeFileSync(p,g);console.log('OK');
           "
 
-      - name: Patch AndroidManifest
-        run: node scripts/patch-manifest.js
+      - name: Patch AndroidManifest (INTERNET only)
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/src/main/AndroidManifest.xml';
+          let m=fs.readFileSync(p,'utf8');
+          if(!m.includes('android.permission.INTERNET'))
+            m=m.replace('<application','<uses-permission android:name=\"android.permission.INTERNET\" />\n    <application');
+          fs.writeFileSync(p,m);console.log('OK');
+          "
 
       - name: Verify manifest
         run: cat SentriDockAndroid/android/app/src/main/AndroidManifest.xml
