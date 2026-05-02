@@ -2,9 +2,27 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ScrollView, RefreshControl, Linking, ToastAndroid,
-  Clipboard, Modal, ActivityIndicator,
+  Clipboard, Modal, ActivityIndicator, Platform,
 } from 'react-native';
 import { bridge } from '../lib/bridge';
+
+// Abre direto a tela de "Acesso a todos os arquivos" do app específico.
+// Em Android 11+ esse intent existe; em versões mais antigas cai no fallback.
+async function openAllFilesAccess() {
+  try {
+    if (Platform.OS === 'android' && Platform.Version >= 30) {
+      // Tenta abrir a tela específica do app
+      await Linking.sendIntent('android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
+      return;
+    }
+  } catch (_) {
+    try {
+      await Linking.sendIntent('android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION');
+      return;
+    } catch (_) {}
+  }
+  Linking.openSettings();
+}
 
 const PALETTE = ['#00c8e0', '#f5a623', '#22d36b', '#7c8ff5', '#f572c0', '#ff7744'];
 const STATUS_LABELS = {
@@ -50,7 +68,7 @@ function PermissionGate({ onGranted }) {
 
       {error && <Text style={s.permError}>⚠ {error}</Text>}
 
-      <TouchableOpacity style={s.permBtn} onPress={() => Linking.openSettings()}>
+      <TouchableOpacity style={s.permBtn} onPress={openAllFilesAccess}>
         <Text style={s.permBtnText}>⚙ Abrir configurações</Text>
       </TouchableOpacity>
 

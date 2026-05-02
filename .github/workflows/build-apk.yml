@@ -79,15 +79,7 @@ jobs:
 
       - name: Merge package.json dependencies
         run: |
-          node -e "
-          const fs=require('fs');
-          const p='SentriDockAndroid/package.json';
-          const pkg=JSON.parse(fs.readFileSync(p,'utf8'));
-          pkg.dependencies={...pkg.dependencies,
-            '@react-native-async-storage/async-storage':'^1.21.0'
-          };
-          fs.writeFileSync(p,JSON.stringify(pkg,null,2));
-          "
+          node scripts/merge-deps.js
 
       - name: Install React Native dependencies
         working-directory: SentriDockAndroid
@@ -99,56 +91,28 @@ jobs:
 
       - name: Patch nodejs-mobile gradle
         run: |
-          node -e "
-          const fs=require('fs');
-          const p='SentriDockAndroid/node_modules/nodejs-mobile-react-native/android/build.gradle';
-          if(!fs.existsSync(p))process.exit(0);
-          let g=fs.readFileSync(p,'utf8');
-          g=g.replace(/repositories\s*\{[^}]*\}/g,'repositories {\n        google()\n        mavenCentral()\n        maven { url \"https://dl.google.com/dl/android/maven2/\" }\n    }');
-          g=g.replace(/com\.android\.tools\.build:gradle:[0-9.]+/g,'com.android.tools.build:gradle:7.4.2');
-          fs.writeFileSync(p,g);
-          "
+          node scripts/patch-gradle.js
 
       - name: Patch app build.gradle (NDK + packaging)
         run: |
-          node -e "
-          const fs=require('fs');
-          const p='SentriDockAndroid/android/app/build.gradle';
-          let g=fs.readFileSync(p,'utf8');
-          if(!g.includes('abiFilters'))g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk { abiFilters \"arm64-v8a\", \"x86_64\" }');
-          if(!g.includes('packagingOptions'))g=g.replace(/buildTypes\s*\{/,'packagingOptions { pickFirst \"**/libnode.so\"; pickFirst \"**/libc++_shared.so\" }\n    buildTypes {');
-          fs.writeFileSync(p,g);
-          "
+          node scripts/patch-build-gradle.js
 
       - name: Patch AndroidManifest (storage permissions)
         run: |
-          node -e "
-          const fs=require('fs');
-          const p='SentriDockAndroid/android/app/src/main/AndroidManifest.xml';
-          let m=fs.readFileSync(p,'utf8');
-          const perms = [
-            '<uses-permission android:name=\"android.permission.INTERNET\" />',
-            '<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />',
-            '<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />',
-            '<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" tools:ignore=\"ScopedStorage\" />'
-          ];
-          // Adiciona namespace tools se faltar
-          if(!m.includes('xmlns:tools='))
-            m=m.replace('xmlns:android=','xmlns:tools=\"http://schemas.android.com/tools\"\n    xmlns:android=');
-          // Adiciona requestLegacyExternalStorage no application
-          if(!m.includes('requestLegacyExternalStorage'))
-            m=m.replace('<application','<application\n      android:requestLegacyExternalStorage=\"true\"');
-          // Adiciona permissões (cada uma individualmente, se não estiver lá)
-          for(const perm of perms){
-            const name = perm.match(/android:name=\"([^\"]+)\"/)[1];
-            if(!m.includes(name)) m = m.replace('<application', perm + '\n    <application');
-          }
-          fs.writeFileSync(p,m);
-          console.log('OK manifest patched');
-          "
+          node scripts/patch-manifest.js
 
-      - name: Verify manifest
-        run: cat SentriDockAndroid/android/app/src/main/AndroidManifest.xml
+      - name: Verify manifest has all perms
+        run: |
+          set -e
+          M=SentriDockAndroid/android/app/src/main/AndroidManifest.xml
+          echo "=== Manifest final ==="
+          cat $M
+          echo "=== Confere permissões ==="
+          grep -q "MANAGE_EXTERNAL_STORAGE" $M || (echo "❌ FALTA MANAGE_EXTERNAL_STORAGE"; exit 1)
+          grep -q "READ_EXTERNAL_STORAGE"   $M || (echo "❌ FALTA READ_EXTERNAL_STORAGE";   exit 1)
+          grep -q "WRITE_EXTERNAL_STORAGE"  $M || (echo "❌ FALTA WRITE_EXTERNAL_STORAGE";  exit 1)
+          grep -q "INTERNET"                $M || (echo "❌ FALTA INTERNET";                exit 1)
+          echo "✅ Todas as permissões presentes"
 
       - name: Install Node.js backend dependencies
         working-directory: SentriDockAndroid/nodejs-assets/nodejs-project
@@ -156,16 +120,7 @@ jobs:
 
       - name: Patch signing config
         run: |
-          node -e "
-          const fs=require('fs');
-          const p='SentriDockAndroid/android/app/build.gradle';
-          let g=fs.readFileSync(p,'utf8');
-          if(!g.includes('signingConfigs')){
-            g=g.replace(/android\s*\{/,'android {\n    signingConfigs { release { storeFile file(MYAPP_UPLOAD_STORE_FILE); storePassword MYAPP_UPLOAD_STORE_PASSWORD; keyAlias MYAPP_UPLOAD_KEY_ALIAS; keyPassword MYAPP_UPLOAD_KEY_PASSWORD } }');
-            g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
-          }
-          fs.writeFileSync(p,g);
-          "
+          node scripts/patch-signing.js
 
       - name: Generate keystore
         working-directory: SentriDockAndroid/android/app
@@ -207,8 +162,8 @@ jobs:
         if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.${{ github.run_number }}
-          name: SentriDock v0.2.${{ github.run_number }}
+          tag_name: v0.3.${{ github.run_number }}
+          name: SentriDock v0.3.${{ github.run_number }}
           files: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
