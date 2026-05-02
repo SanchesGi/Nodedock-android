@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  SafeAreaView, StatusBar, StyleSheet, View,
-  TouchableOpacity, Text, Animated, PermissionsAndroid, Platform
+  SafeAreaView, StatusBar, StyleSheet, View, TouchableOpacity,
+  Text, Animated, PermissionsAndroid, Platform, Linking, Alert
 } from 'react-native';
 import HomeScreen     from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -12,16 +12,32 @@ const TABS = [
   { key: 'settings', label: '⚙ Config'   },
 ];
 
-async function requestPermissions() {
+async function requestAllFilesPermission() {
   if (Platform.OS !== 'android') return;
+
+  // Android 11+ (API 30+): precisa de All Files Access
+  if (Platform.Version >= 30) {
+    Alert.alert(
+      '📁 Permissão necessária',
+      'SentriDock precisa de acesso total aos arquivos para encontrar seus projetos Node.js.\n\nNa próxima tela, ative "Permitir acesso a todos os arquivos" para o SentriDock.',
+      [{
+        text: 'Abrir Configurações',
+        onPress: () => {
+          Linking.openSettings();
+        }
+      }],
+      { cancelable: false }
+    );
+    return;
+  }
+
+  // Android 10 e abaixo
   try {
     await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
       PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
     ]);
-  } catch (e) {
-    console.warn('Permissão negada:', e);
-  }
+  } catch(e) { console.warn(e); }
 }
 
 export default function App() {
@@ -30,11 +46,9 @@ export default function App() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    requestPermissions().then(() => {
-      initBridge().then(() => {
-        setReady(true);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-      });
+    initBridge().then(() => {
+      setReady(true);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     });
   }, []);
 
@@ -52,7 +66,9 @@ export default function App() {
       <SafeAreaView style={s.root}>
         <View style={s.topbar}>
           <Text style={s.brand}>⬡ Sentri<Text style={{ color: '#00c8e0' }}>Dock</Text></Text>
-          <Text style={s.tagline}>project manager</Text>
+          <TouchableOpacity onPress={requestAllFilesPermission} style={s.permBtn}>
+            <Text style={s.permBtnText}>🔑 Permissão</Text>
+          </TouchableOpacity>
         </View>
         <View style={s.content}>
           {tab === 'home'     && <HomeScreen />}
@@ -60,11 +76,7 @@ export default function App() {
         </View>
         <View style={s.bottomNav}>
           {TABS.map(t => (
-            <TouchableOpacity
-              key={t.key}
-              style={[s.navItem, tab === t.key && s.navActive]}
-              onPress={() => setTab(t.key)}
-            >
+            <TouchableOpacity key={t.key} style={[s.navItem, tab === t.key && s.navActive]} onPress={() => setTab(t.key)}>
               <Text style={[s.navLabel, tab === t.key && s.navLabelActive]}>{t.label}</Text>
             </TouchableOpacity>
           ))}
@@ -79,9 +91,10 @@ const s = StyleSheet.create({
   splash:         { flex: 1, backgroundColor: '#0b0d13', alignItems: 'center', justifyContent: 'center', gap: 12 },
   splashLogo:     { fontSize: 28, fontWeight: '900', color: '#c8d0e8', letterSpacing: 1 },
   splashSub:      { fontSize: 12, color: '#3a4260', fontFamily: 'monospace' },
-  topbar:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 13, backgroundColor: '#12151f', borderBottomWidth: 1, borderBottomColor: '#1f2535' },
+  topbar:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#12151f', borderBottomWidth: 1, borderBottomColor: '#1f2535' },
   brand:          { fontSize: 16, fontWeight: '900', color: '#c8d0e8', letterSpacing: 1 },
-  tagline:        { fontSize: 10, color: '#3a4260', fontFamily: 'monospace', borderWidth: 1, borderColor: '#2a3148', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  permBtn:        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, borderWidth: 1, borderColor: 'rgba(245,166,35,.4)', backgroundColor: 'rgba(245,166,35,.08)' },
+  permBtnText:    { fontSize: 10, color: '#f5a623', fontWeight: '700' },
   content:        { flex: 1 },
   bottomNav:      { flexDirection: 'row', backgroundColor: '#12151f', borderTopWidth: 1, borderTopColor: '#1f2535' },
   navItem:        { flex: 1, paddingVertical: 14, alignItems: 'center' },
