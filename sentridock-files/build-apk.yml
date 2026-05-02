@@ -1,0 +1,214 @@
+name: Build SentriDock APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager "ndk;25.1.8937393"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.1.8937393" >> $GITHUB_ENV
+
+      - name: Init React Native project
+        run: |
+          npx @react-native-community/cli@13 init SentriDockAndroid \
+            --version 0.73.6 \
+            --skip-install \
+            --title "SentriDock" \
+            --package-name "com.sentridock.android"
+
+      - name: Overlay source files
+        run: |
+          cp -f src/App.jsx SentriDockAndroid/App.jsx
+          cp -f index.js    SentriDockAndroid/index.js
+          mkdir -p SentriDockAndroid/src
+          cp -rf src/screens   SentriDockAndroid/src/screens
+          cp -rf src/lib       SentriDockAndroid/src/lib
+          cp -rf nodejs-assets SentriDockAndroid/nodejs-assets
+
+      - name: Apply custom icon
+        run: |
+          pip install Pillow --break-system-packages -q
+          python3 << 'PYEOF'
+          from PIL import Image
+          import os
+          src = 'assets/icon.png'
+          if not os.path.exists(src):
+              print('Sem icone customizado.')
+              exit(0)
+          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+          base = 'SentriDockAndroid/android/app/src/main/res'
+          img = Image.open(src).convert('RGBA')
+          for folder,size in sizes.items():
+              d = f'{base}/{folder}'
+              os.makedirs(d, exist_ok=True)
+              r = img.resize((size,size), Image.LANCZOS)
+              r.save(f'{d}/ic_launcher.png')
+              r.save(f'{d}/ic_launcher_round.png')
+          PYEOF
+
+      - name: Merge package.json dependencies
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/package.json';
+          const pkg=JSON.parse(fs.readFileSync(p,'utf8'));
+          pkg.dependencies={...pkg.dependencies,
+            '@react-native-async-storage/async-storage':'^1.21.0'
+          };
+          fs.writeFileSync(p,JSON.stringify(pkg,null,2));
+          "
+
+      - name: Install React Native dependencies
+        working-directory: SentriDockAndroid
+        run: npm install
+
+      - name: Install nodejs-mobile
+        working-directory: SentriDockAndroid
+        run: npm install nodejs-mobile-react-native
+
+      - name: Patch nodejs-mobile gradle
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/node_modules/nodejs-mobile-react-native/android/build.gradle';
+          if(!fs.existsSync(p))process.exit(0);
+          let g=fs.readFileSync(p,'utf8');
+          g=g.replace(/repositories\s*\{[^}]*\}/g,'repositories {\n        google()\n        mavenCentral()\n        maven { url \"https://dl.google.com/dl/android/maven2/\" }\n    }');
+          g=g.replace(/com\.android\.tools\.build:gradle:[0-9.]+/g,'com.android.tools.build:gradle:7.4.2');
+          fs.writeFileSync(p,g);
+          "
+
+      - name: Patch app build.gradle (NDK + packaging)
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/build.gradle';
+          let g=fs.readFileSync(p,'utf8');
+          if(!g.includes('abiFilters'))g=g.replace(/defaultConfig\s*\{/,'defaultConfig {\n        ndk { abiFilters \"arm64-v8a\", \"x86_64\" }');
+          if(!g.includes('packagingOptions'))g=g.replace(/buildTypes\s*\{/,'packagingOptions { pickFirst \"**/libnode.so\"; pickFirst \"**/libc++_shared.so\" }\n    buildTypes {');
+          fs.writeFileSync(p,g);
+          "
+
+      - name: Patch AndroidManifest (storage permissions)
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/src/main/AndroidManifest.xml';
+          let m=fs.readFileSync(p,'utf8');
+          const perms = [
+            '<uses-permission android:name=\"android.permission.INTERNET\" />',
+            '<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />',
+            '<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />',
+            '<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" tools:ignore=\"ScopedStorage\" />'
+          ];
+          // Adiciona namespace tools se faltar
+          if(!m.includes('xmlns:tools='))
+            m=m.replace('xmlns:android=','xmlns:tools=\"http://schemas.android.com/tools\"\n    xmlns:android=');
+          // Adiciona requestLegacyExternalStorage no application
+          if(!m.includes('requestLegacyExternalStorage'))
+            m=m.replace('<application','<application\n      android:requestLegacyExternalStorage=\"true\"');
+          // Adiciona permissões (cada uma individualmente, se não estiver lá)
+          for(const perm of perms){
+            const name = perm.match(/android:name=\"([^\"]+)\"/)[1];
+            if(!m.includes(name)) m = m.replace('<application', perm + '\n    <application');
+          }
+          fs.writeFileSync(p,m);
+          console.log('OK manifest patched');
+          "
+
+      - name: Verify manifest
+        run: cat SentriDockAndroid/android/app/src/main/AndroidManifest.xml
+
+      - name: Install Node.js backend dependencies
+        working-directory: SentriDockAndroid/nodejs-assets/nodejs-project
+        run: npm install
+
+      - name: Patch signing config
+        run: |
+          node -e "
+          const fs=require('fs');
+          const p='SentriDockAndroid/android/app/build.gradle';
+          let g=fs.readFileSync(p,'utf8');
+          if(!g.includes('signingConfigs')){
+            g=g.replace(/android\s*\{/,'android {\n    signingConfigs { release { storeFile file(MYAPP_UPLOAD_STORE_FILE); storePassword MYAPP_UPLOAD_STORE_PASSWORD; keyAlias MYAPP_UPLOAD_KEY_ALIAS; keyPassword MYAPP_UPLOAD_KEY_PASSWORD } }');
+            g=g.replace(/release\s*\{/,'release {\n            signingConfig signingConfigs.release');
+          }
+          fs.writeFileSync(p,g);
+          "
+
+      - name: Generate keystore
+        working-directory: SentriDockAndroid/android/app
+        run: |
+          keytool -genkeypair -v \
+            -keystore sentridock-release.keystore \
+            -alias sentridock \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass sentridock123 -keypass sentridock123 \
+            -dname "CN=SentriDock,O=SentriDock,C=BR"
+
+      - name: Configure signing
+        working-directory: SentriDockAndroid/android
+        run: printf "\nMYAPP_UPLOAD_STORE_FILE=sentridock-release.keystore\nMYAPP_UPLOAD_KEY_ALIAS=sentridock\nMYAPP_UPLOAD_STORE_PASSWORD=sentridock123\nMYAPP_UPLOAD_KEY_PASSWORD=sentridock123\n" >> gradle.properties
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('SentriDockAndroid/android/**/*.gradle*') }}
+
+      - name: Build APK
+        working-directory: SentriDockAndroid/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SentriDock-APK-v${{ github.run_number }}
+          path: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Create Release
+        if: success() && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.${{ github.run_number }}
+          name: SentriDock v0.2.${{ github.run_number }}
+          files: SentriDockAndroid/android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
