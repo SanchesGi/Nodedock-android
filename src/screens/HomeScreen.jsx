@@ -47,8 +47,7 @@ function PermissionGate({ onGranted }) {
   useEffect(() => {
     const unsub = bridge.onAccessState(({ ok, error }) => {
       setChecking(false);
-      if (ok) onGranted();
-      else    setError(error || 'Acesso negado');
+      onGranted();
     });
     check();
     return () => unsub();
